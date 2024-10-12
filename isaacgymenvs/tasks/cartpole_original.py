@@ -157,16 +157,8 @@ class Cartpole(VecTask):
         self.progress_buf[env_ids] = 0
 
     def pre_physics_step(self, actions):
-        print("打印actions")
-        print(actions)
         actions_tensor = torch.zeros(self.num_envs * self.num_dof, device=self.device, dtype=torch.float)
-        print("打印actions_tensor")
-        print(actions_tensor)
-        print("打印self.num_dof")
-        print(self.num_dof)
         actions_tensor[::self.num_dof] = actions.to(self.device).squeeze() * self.max_push_effort
-        print("打印actions_tensor[::self.num_dof]")
-        print(actions_tensor[::self.num_dof])
         forces = gymtorch.unwrap_tensor(actions_tensor)
         self.gym.set_dof_actuation_force_tensor(self.sim, forces)
 

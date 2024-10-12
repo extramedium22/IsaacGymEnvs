@@ -1,0 +1,9 @@
+<mujoco model="Box">
+  <compiler angle="degree" coordinate="local" inertiafromgeom="true" />
+  <worldbody>
+    <body name="chassis" pos="0 0 0">
+      <geom type="box" size="0.05 0.05 0.05" pos="0 0 0" />
+      <inertial mass="0.5" />
+    </body>
+  </worldbody>
+</mujoco>

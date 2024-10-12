@@ -33,7 +33,7 @@ import torch
 from isaacgym import gymutil, gymtorch, gymapi
 from .base.vec_task import VecTask
 
-class Cartpole(VecTask):
+class CubeAgent(VecTask):
 
     def __init__(self, cfg, rl_device, sim_device, graphics_device_id, headless, virtual_screen_capture, force_render):
         self.cfg = cfg
@@ -48,10 +48,34 @@ class Cartpole(VecTask):
 
         super().__init__(config=self.cfg, rl_device=rl_device, sim_device=sim_device, graphics_device_id=graphics_device_id, headless=headless, virtual_screen_capture=virtual_screen_capture, force_render=force_render)
 
+        #这里获取仿真环境的状态
+
         dof_state_tensor = self.gym.acquire_dof_state_tensor(self.sim)
         self.dof_state = gymtorch.wrap_tensor(dof_state_tensor)
-        self.dof_pos = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 0]
+        self.dof_pos = self.dof_state.view(self.num_envs, self.num_dof, 2)[:, :, 0]
         self.dof_vel = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 1]
+        print("第一个环境的pos:" + str(self.dof_pos[0,...]))
+        print("所有环境的pos:" + str(self.dof_pos))
+        print("DOF的reshape:" + str(self.dof_state.view(self.num_envs, self.num_dof, 2)))
+
+
+        '''
+        root_state_tensor = self.gym.acquire_actor_root_state_tensor(self.sim)
+        self.root_states = gymtorch.wrap_tensor(root_state_tensor).view(self.num_envs, 13)
+        self.root_positions = self.root_states[..., 0:3]
+        self.root_linvels = self.root_states[..., 7:10]
+        '''
+
+        #self.root_tensor = gymtorch.wrap_tensor(self.gym.acquire_actor_root_state_tensor(self.sim))
+        #vec_root_tensor = gymtorch.wrap_tensor(self.root_tensor).view(self.num_envs, 13)
+        #self.root_states = vec_root_tensor
+        #self.root_positions = vec_root_tensor[..., 0:3]
+        #self.root_linvels = vec_root_tensor[..., 7:10]
+        #self.gym.refresh_actor_root_state_tensor(self.sim)
+        #self.initial_root_states = vec_root_tensor.clone()
+
+        
+        
 
     def create_sim(self):
         # set the up axis to be z-up given that assets are y-up by default
@@ -73,7 +97,7 @@ class Cartpole(VecTask):
         upper = gymapi.Vec3(0.5 * spacing, spacing, spacing)
 
         asset_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../assets")
-        asset_file = "urdf/cartpole.urdf"
+        asset_file = "urdf/cube02.urdf"
 
         if "asset" in self.cfg["env"]:
             asset_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), self.cfg["env"]["asset"].get("assetRoot", asset_root))
@@ -87,8 +111,10 @@ class Cartpole(VecTask):
         asset_options.fix_base_link = True
         cartpole_asset = self.gym.load_asset(self.sim, asset_root, asset_file, asset_options)
         self.num_dof = self.gym.get_asset_dof_count(cartpole_asset)
+        print("总自由度num_dof=" + str(self.num_dof))
 
         pose = gymapi.Transform()
+        '''
         if self.up_axis == 'z':
             pose.p.z = 2.0
             # asset is rotated z-up by default, no additional rotations needed
@@ -96,6 +122,10 @@ class Cartpole(VecTask):
         else:
             pose.p.y = 2.0
             pose.r = gymapi.Quat(-np.sqrt(2)/2, 0.0, 0.0, np.sqrt(2)/2)
+        '''
+        pose.p.z = 2.0
+        pose.r = gymapi.Quat(0.0, 0.0, 0.0, 1.0)
+
 
         self.cartpole_handles = []
         self.envs = []
@@ -132,7 +162,8 @@ class Cartpole(VecTask):
         if env_ids is None:
             env_ids = np.arange(self.num_envs)
 
-        self.gym.refresh_dof_state_tensor(self.sim)
+        #self.gym.refresh_dof_state_tensor(self.sim)
+        self.gym.refresh_actor_root_state_tensor(self.sim)
 
         self.obs_buf[env_ids, 0] = self.dof_pos[env_ids, 0].squeeze()
         self.obs_buf[env_ids, 1] = self.dof_vel[env_ids, 0].squeeze()
@@ -157,17 +188,10 @@ class Cartpole(VecTask):
         self.progress_buf[env_ids] = 0
 
     def pre_physics_step(self, actions):
-        print("打印actions")
-        print(actions)
         actions_tensor = torch.zeros(self.num_envs * self.num_dof, device=self.device, dtype=torch.float)
-        print("打印actions_tensor")
-        print(actions_tensor)
-        print("打印self.num_dof")
-        print(self.num_dof)
         actions_tensor[::self.num_dof] = actions.to(self.device).squeeze() * self.max_push_effort
-        print("打印actions_tensor[::self.num_dof]")
-        print(actions_tensor[::self.num_dof])
         forces = gymtorch.unwrap_tensor(actions_tensor)
+        print("推力：" + str(forces))
         self.gym.set_dof_actuation_force_tensor(self.sim, forces)
 
     def post_physics_step(self):
